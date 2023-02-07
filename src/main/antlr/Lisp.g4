@@ -6,8 +6,19 @@ grammar Lisp;
 /*------------------------------------------------------------------
  * PARSER RULES
  *------------------------------------------------------------------*/
-program : expression* EOF ;
-expression: OP IDENTIFIER (IDENTIFIER | STRING | NUMBER | expression)* CP;
+program : (expressions+=expression)* EOF ;
+argument: identifier | string | integer | boolean | expression;
+//expression: OP identifier (identifier | string | integer | boolean | expression)* CP;
+expression: defun_expression | call_expression | if_expression;
+
+defun_expression: OP 'defun' name=identifier '[' (args+=identifier (',' args+=identifier)*)? ']' body=expression CP;
+if_expression: OP 'if' condition=argument ifTrue=argument ifFalse=argument CP;
+call_expression: OP fn=identifier (args+=argument)* CP;
+
+identifier: IDENTIFIER;
+string: STRING;
+integer: NUMBER;
+boolean: TRUE | FALSE;
 
 /*------------------------------------------------------------------
  * LEXER RULES
@@ -21,6 +32,8 @@ DIV : '/';
 EQ : '=';
 OP : '(';
 CP : ')';
+TRUE: 'true';
+FALSE: 'false';
 
 STRING : '"'~["\\\n]*(('\\'.)~["\\\n]*)*'"' ;
 
