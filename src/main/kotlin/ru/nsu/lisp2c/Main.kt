@@ -16,6 +16,7 @@ import org.antlr.v4.runtime.ParserRuleContext
 import org.antlr.v4.runtime.tree.ErrorNode
 import org.antlr.v4.runtime.tree.ParseTreeWalker
 import org.antlr.v4.runtime.tree.TerminalNode
+//import sun.jvm.hotspot.debugger.cdbg.Sym
 import java.io.FileInputStream
 import java.io.FileReader
 import java.lang.Exception
@@ -30,130 +31,68 @@ import java.util.InputMismatchException
 // Let          : I don't know
 // Recurse      : Simple
 
-
-sealed interface Argument
-class IntArgument(val v: Int) : Argument
-class ExpressionArgument(val v: Expression) : Argument
-class IdentifierArgument(val name: String) : Argument
-
-sealed interface Expression
-class CallExpression(val name: String, val args: List<Argument>) : Expression
-class DefunExpression(val name: String, val arguments: List<IdentifierArgument>, val body: Expression): Expression
-class IfExpression(val condition: Argument, val ifTrue: Argument, val ifFalse: Argument): Expression
+const val lispObjectType = "lisp__object *"
+const val newObject = "gc__new_object"
+const val varPrefix = "lisp_var"
+fun nameCName(name: String) = "${varPrefix}_$name"
+fun cNameClojureType(cname: String) = cname.replaceFirst(varPrefix, "lisp_clojure") + "_t"
+fun cNameBody(cname: String) = cname.replaceFirst(varPrefix, "lisp_body")
+fun cNameStartLabel(cname: String) = cname.replaceFirst(varPrefix, "lisp_start")
+fun functionType(n: Int) = "lisp_fun_${n}_t"
 
 
-class ProgramVisitor: LispBaseVisitor<List<Expression>>(){
-    override fun visitProgram(ctx: LispParser.ProgramContext): List<Expression> {
-        return ctx.expressions.map { ExpressionVisitor().visitExpression(it) }
-    }
+
+data class Symbol(val name: String, val cName: String) {
+    fun pair(): Pair<String, Symbol> = name to this
 }
 
-class ArgumentVisitor: LispBaseVisitor<Argument>(){
-    override fun visitExpression(ctx: LispParser.ExpressionContext): Argument {
-        return ExpressionArgument(ExpressionVisitor().visitExpression(ctx))
-    }
+infix fun String.cname(cname: String) = this to Symbol(this, cname)
+val builtinSymbols = mapOf(
+    "*" cname "lisp__mul",
+    "+" cname "lisp__add",
+    "-" cname "lisp__sub",
+    "/" cname "lisp__div",
+    "=" cname "lisp__eq"
 
-    override fun visitIdentifier(ctx: LispParser.IdentifierContext): Argument {
-        return IdentifierArgument(ctx.text)
-    }
+    )
 
-    override fun visitInteger(ctx: LispParser.IntegerContext): Argument {
-        return IntArgument(v = ctx.text.toInt())
-    }
+data class GeneratorContext(
+    val prototypes: MutableList<String> = mutableListOf(),
+    val functionBodies: MutableList<String> = mutableListOf(),
+    val mainLines: MutableList<String> = mutableListOf(),
+    private var nextID: Int = 0,
+    val scope:MapStack<String, Symbol> = MapStack(),
+){
+    fun newVarName() = "lisp_var_${nextID++}"
 }
 
-class ExpressionVisitor: LispBaseVisitor<Expression>(){
-    override fun visitExpression(ctx: LispParser.ExpressionContext?): Expression {
-        return visitChildren(ctx)
+
+fun variableCName(name: String): String = "lisp_var_$name"
+
+
+class Generator() {
+    val ctx = GeneratorContext()
+
+    init {
+        ctx.scope.pushScope()
+        builtinSymbols.forEach{ctx.scope[it.key] = it.value}
+
     }
 
-    override fun visitDefun_expression(ctx: LispParser.Defun_expressionContext): Expression {
-        return DefunExpression(
-            name = ctx.name.text,
-            arguments = ctx.args.map { ArgumentVisitor().visitIdentifier(it) as IdentifierArgument},
-            body = visitExpression(ctx.body)
-        )
-    }
+    fun generate(prog: List<Expression>): String {
+        val defuns = prog.filterIsInstance<DefunExpression>()
+        defuns.forEach { it.generate(ctx) }
 
-    override fun visitIf_expression(ctx: LispParser.If_expressionContext): Expression {
-        return IfExpression(
-            condition = ArgumentVisitor().visitArgument(ctx.condition),
-            ifTrue = ArgumentVisitor().visitArgument(ctx.ifTrue),
-            ifFalse = ArgumentVisitor().visitArgument(ctx.ifFalse),
-        )
-    }
-
-    override fun visitCall_expression(ctx: LispParser.Call_expressionContext): Expression {
-        return CallExpression(
-            name = ctx.fn.text,
-            args = ctx.args.map { ArgumentVisitor().visitArgument(it) }
-        )
+        return """
+            ${ctx.prototypes.joinToString("\n")}
+            ${ctx.functionBodies.joinToString("\n")}
+            int main(){
+                ${ctx.mainLines.joinToString("\n")}
+                return 0;
+            }
+        """.trimIndent()
     }
 }
-
-const val lispObjectType = "lisp__object"
-
-class Function(val name: String, val args: List<String>, val closure: List<String>, val body: Expression){
-    val cName = "lisp__defun__${name}__${args.size}"
-    val clojureType = "${cName}__clojure_t"
-    val prototype: String get()  {
-//        var res = "$lispObjectType $cName($clojureType clojure"
-        var res = "$lispObjectType $cName("
-        args.forEach { res += "$lispObjectType ${argName(it)}, " }
-        res = res.removeSuffix(", ")
-        res += ")"
-        return res
-    }
-    fun argName(arg: String) = "lisp__$arg"
-
-    fun generatePrototype(): String{
-//        var res = "typedef struct {\n"
-//        closure.forEach {
-//            res += "\t$lispObjectType $it;\n"
-//        }
-//        res += "} $clojureType;\n"
-        val res = "$prototype;"
-
-        return res
-    }
-
-    fun generateImplementation(): String{
-        var res = "$prototype{\n"
-        res += "return ${generateExpression(body)};"
-        res += "}\n"
-        return res
-    }
-
-    fun convertFunctionName(name: String, argsSize: Int): String{
-        return when(name){
-            "=" -> "lisp__eq"
-            "*" -> "lisp__mul"
-            "-" -> "lisp__sub"
-            else -> "lisp__defun__${name}__${argsSize}"
-        }
-    }
-
-    fun generateExpression(e: Expression): String{
-        return when(e){
-            is IfExpression -> "(lisp__is_true(${generateArgument(e.condition)}) ? ${generateArgument(e.ifTrue)} : ${generateArgument(e.ifFalse)})"
-            is CallExpression -> "${convertFunctionName(e.name, e.args.size)}(${e.args.map{generateArgument(it)}.joinToString(", ")})"
-            is DefunExpression -> throw Exception("Defun can only be used on top level")
-        }
-    }
-
-    fun generateArgument(a: Argument): String{
-        return when(a){
-            is IntArgument -> "lisp__int_constructor(${a.v})"
-            is ExpressionArgument -> generateExpression(a.v)
-            is IdentifierArgument -> argName(a.name)
-        }
-    }
-
-//    fun generate
-
-
-}
-
 
 fun main(args: Array<String>) {
     val inputStream = FileInputStream("src/main/resources/factorial.lisp")
@@ -161,18 +100,5 @@ fun main(args: Array<String>) {
     val parser = LispParser(CommonTokenStream(lexer))
     val prog = parser.program()
     val parsed = ProgramVisitor().visitProgram(prog)
-
-    // TODO: handle other bullshit
-    val defuns = parsed.filterIsInstance<DefunExpression>()
-
-    defuns.forEach {
-        println(Function(it.name, it.arguments.map { it.name }, emptyList(), it.body).generatePrototype())
-    }
-
-    defuns.forEach { println(Function(it.name, it.arguments.map { it.name }, emptyList(), it.body).generateImplementation()) }
-
-
-
-//    println(parsed)
+    println(Generator().generate(parsed))
 }
-
