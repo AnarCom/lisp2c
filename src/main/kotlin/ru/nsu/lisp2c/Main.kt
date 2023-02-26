@@ -82,11 +82,17 @@ class Generator() {
     fun generate(prog: List<Expression>): String {
         val defuns = prog.filterIsInstance<DefunExpression>()
         defuns.forEach { it.generate(ctx) }
+        val functionTypedefs = (0..10).map {n ->
+            val args = (arrayOf("void*") + (0 until n).map { lispObjectType }).joinToString(", ")
+            "typedef $lispObjectType(*${functionType(n)})($args);"
+        }
 
         return """
+            ${functionTypedefs.joinToString("\n")}
             ${ctx.prototypes.joinToString("\n")}
             ${ctx.functionBodies.joinToString("\n")}
             int main(){
+                gc__init();
                 ${ctx.mainLines.joinToString("\n")}
                 return 0;
             }
@@ -100,5 +106,17 @@ fun main(args: Array<String>) {
     val parser = LispParser(CommonTokenStream(lexer))
     val prog = parser.program()
     val parsed = ProgramVisitor().visitProgram(prog)
-    println(Generator().generate(parsed))
+    val generated = Generator().generate(parsed)
+    val process = ProcessBuilder("clang-format")
+        .redirectInput(ProcessBuilder.Redirect.PIPE)
+        .redirectOutput(ProcessBuilder.Redirect.PIPE)
+        .redirectError(ProcessBuilder.Redirect.INHERIT)
+        .start()
+
+    process.outputStream.write(generated.encodeToByteArray())
+    process.outputStream.close()
+    val formatted = process.inputStream.bufferedReader().readText()
+    println(formatted)
+
+
 }

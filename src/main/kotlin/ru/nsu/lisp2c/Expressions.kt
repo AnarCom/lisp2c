@@ -16,7 +16,7 @@ class CallExpression(val target: Expression, val args: List<Expression>) : Expre
             ${generatedArgs.map { it.body }.joinToString("")}
             assert($targetName->type == CALLABLE);
             assert($targetName->value.callable.n_args == ${args.size});
-            $resultVarName = ((${functionType(args.size)})$targetName->value.callable.f)($argsString);
+            $lispObjectType $resultVarName = ((${functionType(args.size)})$targetName->value.callable.f)($argsString);
         """.trimIndent()
         return GeneratedExpression(body, resultVarName)
     }
@@ -34,12 +34,11 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
 
         val prototype = """
             $lispObjectType ${bodyName}($argumentString);
-            $lispObjectType $cName = null;
+            $lispObjectType $cName = NULL;
         """.trimIndent()
 
         val mainInit = """
-            $cName = $newObject();
-            lisp_init_defun($cName, ${arguments.size});
+            $cName = lisp__callable_constructor($bodyName, ${arguments.size}, NULL);
         """.trimIndent()
 
         ctx.mainLines += mainInit;
@@ -53,7 +52,7 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
 
         val body = """
             $lispObjectType ${bodyName}($argumentString){
-                $startLabel:
+                $startLabel:;
                 $generatedBody;
                 return $returnVarName;
             }
@@ -91,7 +90,7 @@ class IfExpression(val condition: Expression, val ifTrue: Expression, val ifFals
 class IntExpression(val v: Int) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val varName = ctx.newVarName();
-        val body = "$varName = lisp__create_int($v);\n"
+        val body = "$lispObjectType $varName = lisp__int_constructor($v);\n"
         return GeneratedExpression(body, varName);
     }
 }
