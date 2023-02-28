@@ -1,5 +1,9 @@
 package ru.nsu.lisp2c
 
+import java.util.Stack
+
+data class RecurContext(val label: String, val cNames: List<String>)
+
 data class GeneratorContext(
     val prototypes: MutableList<String> = mutableListOf(),
     val functionBodies: MutableList<String> = mutableListOf(),
@@ -7,7 +11,13 @@ data class GeneratorContext(
     private var nextID: Int = 0,
     val scope: MapStack<String, Symbol> = MapStack(),
 ) {
+    private val recurContextStack = Stack<RecurContext>()
     fun newVarName() = "lisp_var_${nextID++}"
+
+    fun pushRecurContext(ctx: RecurContext) = recurContextStack.push(ctx)
+    fun popRecurContext() = recurContextStack.pop()
+    val recurContext: RecurContext
+        get() = recurContextStack.peek()
 }
 
 

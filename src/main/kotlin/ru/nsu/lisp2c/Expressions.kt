@@ -52,7 +52,9 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
 
         ctx.scope.pushScope()
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
+        ctx.pushRecurContext(RecurContext(startLabel, arguments.map { nameCName(it.name) }))
         val (generatedBody, returnVarName) = body.generate(ctx)
+        ctx.popRecurContext()
         ctx.scope.popScope()
 
 
@@ -128,9 +130,10 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         ctx.scope.pushScope()
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
         symbolsToCapture.values.forEach { ctx.scope[it.name] = Symbol(it.name, "clj->${it.cName}") }
-
+        ctx.pushRecurContext(RecurContext(startLabel, arguments.map { nameCName(it.name) }))
         val (generatedBody, returnVarName) = body.generate(ctx)
         ctx.scope.popScope()
+        ctx.popRecurContext()
 
 
         val funcionBody = """
@@ -187,5 +190,33 @@ class IntExpression(val v: Int) : Expression {
 class IdentifierExpression(val name: String) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         return GeneratedExpression("", ctx.scope[name]!!.cName)
+    }
+}
+
+class RecurExpression(val args: List<Expression>): Expression {
+    override fun generate(ctx: GeneratorContext): GeneratedExpression {
+        if(args.size != ctx.recurContext.cNames.size){
+            throw Exception("recur: wrong argument count")
+        }
+
+        val generatedArgs = args.map { it.generate(ctx) }
+        val argCalculationBody = generatedArgs.joinToString(""){it.body}
+
+
+        val body = """
+            $argCalculationBody
+            ${ctx.recurContext.cNames.mapIndexed{ i, cName -> "$cName = ${generatedArgs[i].varName};\n" }.joinToString("")}
+            goto ${ctx.recurContext.label};
+        """.trimIndent()
+        return  GeneratedExpression(body, "NULL")
+    }
+
+}
+
+class DoExpression(val args: List<Expression>): Expression {
+    override fun generate(ctx: GeneratorContext): GeneratedExpression {
+        val generatedArgs = args.map { it.generate(ctx) }
+        val body = generatedArgs.joinToString("") { it.body }
+        return GeneratedExpression(body, generatedArgs.last().varName)
     }
 }

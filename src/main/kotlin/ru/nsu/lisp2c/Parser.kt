@@ -37,7 +37,7 @@ class ExpressionVisitor : LispBaseVisitor<Expression>() {
         )
     }
 
-    override fun visitIdentifier_expression(ctx: LispParser.Identifier_expressionContext): Expression {
+    override fun visitIdentifier_expression(ctx: LispParser.Identifier_expressionContext): IdentifierExpression {
         return IdentifierExpression(ctx.text)
     }
 
@@ -48,7 +48,7 @@ class ExpressionVisitor : LispBaseVisitor<Expression>() {
     override fun visitDefunc_expression(ctx: LispParser.Defunc_expressionContext): Expression {
         return DefunCExpression(
             ctx.name.text,
-            ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression },
+            ctx.args.map { visitIdentifier_expression(it) },
             ctx.body.text.split('\n').let { lines ->
                 lines.slice(1 until lines.size - 1)
             }.joinToString("\n"),
@@ -57,8 +57,20 @@ class ExpressionVisitor : LispBaseVisitor<Expression>() {
 
     override fun visitFn_expression(ctx: LispParser.Fn_expressionContext): Expression {
         return FnExpression(
-            arguments = ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression },
+            arguments = ctx.args.map { visitIdentifier_expression(it) },
             body = visitExpression(ctx.body)
+        )
+    }
+
+    override fun visitRecur_expression(ctx: LispParser.Recur_expressionContext): Expression {
+        return RecurExpression(
+            args = ctx.args.map { visitExpression(it) },
+        )
+    }
+
+    override fun visitDo_expression(ctx: LispParser.Do_expressionContext): Expression {
+        return DoExpression(
+            args = ctx.args.map { visitExpression(it) },
         )
     }
 }
