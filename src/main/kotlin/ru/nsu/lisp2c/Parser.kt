@@ -1,6 +1,7 @@
 package ru.nsu.lisp2c
 
 import LispBaseVisitor
+import LispParser
 
 class ProgramVisitor : LispBaseVisitor<List<Expression>>() {
     override fun visitProgram(ctx: LispParser.ProgramContext): List<Expression> {

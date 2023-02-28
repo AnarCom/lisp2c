@@ -1,27 +1,11 @@
 package ru.nsu.lisp2c
 
-import LispBaseListener
-import LispParser
 import LispLexer
-import LispListener
-import LispBaseVisitor
-import LispVisitor
-import org.antlr.runtime.ANTLRInputStream
-import org.antlr.runtime.ANTLRStringStream
-import org.antlr.runtime.CharStream
-import org.antlr.runtime.tree.ParseTree
+import LispParser
 import org.antlr.v4.runtime.CharStreams
 import org.antlr.v4.runtime.CommonTokenStream
-import org.antlr.v4.runtime.ParserRuleContext
-import org.antlr.v4.runtime.tree.ErrorNode
-import org.antlr.v4.runtime.tree.ParseTreeWalker
-import org.antlr.v4.runtime.tree.TerminalNode
-//import sun.jvm.hotspot.debugger.cdbg.Sym
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.FileReader
-import java.lang.Exception
-import java.util.InputMismatchException
 
 //data class Expression()
 // Function call: Simple function call
@@ -31,17 +15,6 @@ import java.util.InputMismatchException
 // If           : Ternary operator
 // Let          : I don't know
 // Recurse      : Simple
-
-const val lispObjectType = "lisp__object *"
-const val newObject = "gc__new_object"
-const val varPrefix = "lisp_var"
-fun nameCName(name: String) = "${varPrefix}_$name"
-fun cNameClojureType(cname: String) = cname.replaceFirst(varPrefix, "lisp_clojure") + "_t"
-fun cNameBody(cname: String) = cname.replaceFirst(varPrefix, "lisp_body")
-fun cNameStartLabel(cname: String) = cname.replaceFirst(varPrefix, "lisp_start")
-fun functionType(n: Int) = "lisp_fun_${n}_t"
-
-
 
 data class Symbol(val name: String, val cName: String) {
     fun pair(): Pair<String, Symbol> = name to this
@@ -55,59 +28,8 @@ val builtinSymbols = mapOf(
     "/" cname "lisp__div",
     "=" cname "lisp__eq"
 
-    )
+)
 
-data class GeneratorContext(
-    val prototypes: MutableList<String> = mutableListOf(),
-    val functionBodies: MutableList<String> = mutableListOf(),
-    val mainLines: MutableList<String> = mutableListOf(),
-    private var nextID: Int = 0,
-    val scope:MapStack<String, Symbol> = MapStack(),
-){
-    fun newVarName() = "lisp_var_${nextID++}"
-}
-
-
-
-class Generator() {
-    val ctx = GeneratorContext()
-
-    init {
-        ctx.scope.pushScope()
-        builtinSymbols.forEach{ctx.scope[it.key] = it.value}
-
-    }
-
-    fun generate(prog: List<Expression>): String {
-        val defuns = prog.filterIsInstance<TopLevelOnlyExpressions>()
-        val mainExpressions = prog.filterNot { it is TopLevelOnlyExpressions }
-        defuns.forEach { it.generate(ctx) }
-
-        val functionTypedefs = (0..10).map {n ->
-            val args = (arrayOf("void*") + (0 until n).map { lispObjectType }).joinToString(", ")
-            "typedef $lispObjectType(*${functionType(n)})($args);"
-        }
-
-        val mainSideEffects = mainExpressions.fold(mutableListOf<String>()){ acc, expr -> acc.apply { add(expr.generate(ctx).body) } }
-
-        return """
-            #include "main.h"
-            #include "assert.h"
-            #include "runtime.h"
-            
-            ${functionTypedefs.joinToString("\n")}
-            ${ctx.prototypes.joinToString("\n")}
-            ${ctx.functionBodies.joinToString("\n")}
-            int main(){
-                runtime__init();
-                ${ctx.mainLines.joinToString("\n")}
-                // non-defun expressions
-                ${mainSideEffects.joinToString("\n")}
-                return 0;
-            }
-        """.trimIndent()
-    }
-}
 
 fun main(args: Array<String>) {
     val inputStream = FileInputStream("src/main/resources/factorial.lisp")
@@ -130,7 +52,4 @@ fun main(args: Array<String>) {
         write(formatted)
         close()
     }
-//    println("Building ...")
-
-
 }
