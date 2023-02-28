@@ -2,13 +2,13 @@ package ru.nsu.lisp2c
 
 import LispBaseVisitor
 
-class ProgramVisitor: LispBaseVisitor<List<Expression>>(){
+class ProgramVisitor : LispBaseVisitor<List<Expression>>() {
     override fun visitProgram(ctx: LispParser.ProgramContext): List<Expression> {
         return ctx.expressions.map { ExpressionVisitor().visitExpression(it) }
     }
 }
 
-class ExpressionVisitor: LispBaseVisitor<Expression>(){
+class ExpressionVisitor : LispBaseVisitor<Expression>() {
     override fun visitExpression(ctx: LispParser.ExpressionContext?): Expression {
         return visitChildren(ctx)
     }
@@ -16,7 +16,7 @@ class ExpressionVisitor: LispBaseVisitor<Expression>(){
     override fun visitDefun_expression(ctx: LispParser.Defun_expressionContext): Expression {
         return DefunExpression(
             name = ctx.name.text,
-            arguments = ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression},
+            arguments = ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression },
             body = visitExpression(ctx.body)
         )
     }
@@ -42,5 +42,15 @@ class ExpressionVisitor: LispBaseVisitor<Expression>(){
 
     override fun visitInteger_expression(ctx: LispParser.Integer_expressionContext): Expression {
         return IntExpression(ctx.text.toInt())
+    }
+
+    override fun visitDefunc_expression(ctx: LispParser.Defunc_expressionContext): Expression {
+        return DefunCExpression(
+            ctx.name.text,
+            ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression },
+            ctx.body.text.split('\n').let { lines ->
+                lines.slice(1 until lines.size - 1)
+            }.joinToString("\n"),
+        )
     }
 }

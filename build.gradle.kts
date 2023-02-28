@@ -39,3 +39,7 @@ tasks.compileKotlin{
 tasks.generateGrammarSource {
     arguments = arguments + listOf("-visitor")
 }
+
+application {
+    mainClass.set("ru.nsu.lisp2c.MainKt")
+}

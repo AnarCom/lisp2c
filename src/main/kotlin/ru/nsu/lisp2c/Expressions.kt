@@ -6,6 +6,8 @@ sealed interface Expression {
     fun generate(ctx: GeneratorContext): GeneratedExpression
 }
 
+interface TopLevelOnlyExpressions: Expression
+
 class CallExpression(val target: Expression, val args: List<Expression>) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val resultVarName = ctx.newVarName();
@@ -22,7 +24,7 @@ class CallExpression(val target: Expression, val args: List<Expression>) : Expre
     }
 }
 
-class DefunExpression(val name: String, val arguments: List<IdentifierExpression>, val body: Expression) : Expression {
+class DefunExpression(val name: String, val arguments: List<IdentifierExpression>, val body: Expression) : Expression, TopLevelOnlyExpressions {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val cName = nameCName(name)
         val clojureType = cNameClojureType(cName)
@@ -62,6 +64,40 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
 
         return GeneratedExpression("ERROR", "ERROR")
     }
+}
+
+// TODO: remove duplicate code
+class DefunCExpression(val name: String, val arguments: List<IdentifierExpression>, val body: String): Expression, TopLevelOnlyExpressions{
+    override fun generate(ctx: GeneratorContext): GeneratedExpression {
+        val cName = nameCName(name)
+        val bodyName = cNameBody(cName)
+        ctx.scope[name] = Symbol(name, cName)
+
+        val argumentString = (arrayOf("void *__clj__") + arguments.map { "$lispObjectType ${it.name}" }).joinToString(", ")
+
+        val prototype = """
+            $lispObjectType ${bodyName}($argumentString);
+            $lispObjectType $cName = NULL;
+        """.trimIndent()
+
+        val mainInit = """
+            $cName = lisp__callable_constructor($bodyName, ${arguments.size}, NULL);
+        """.trimIndent()
+
+        ctx.mainLines += mainInit;
+        ctx.prototypes += prototype
+
+        val body = """
+            $lispObjectType ${bodyName}($argumentString){
+                $body
+            }
+        """.trimIndent()
+
+        ctx.functionBodies += body;
+
+        return GeneratedExpression("ERROR", "ERROR")
+    }
+
 }
 
 class IfExpression(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression {
