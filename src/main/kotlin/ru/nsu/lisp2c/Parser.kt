@@ -53,4 +53,11 @@ class ExpressionVisitor : LispBaseVisitor<Expression>() {
             }.joinToString("\n"),
         )
     }
+
+    override fun visitFn_expression(ctx: LispParser.Fn_expressionContext): Expression {
+        return FnExpression(
+            arguments = ctx.args.map { visitIdentifier_expression(it) as IdentifierExpression },
+            body = visitExpression(ctx.body)
+        )
+    }
 }

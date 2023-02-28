@@ -68,8 +68,6 @@ data class GeneratorContext(
 }
 
 
-fun variableCName(name: String): String = "lisp_var_$name"
-
 
 class Generator() {
     val ctx = GeneratorContext()

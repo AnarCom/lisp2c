@@ -27,9 +27,11 @@ expression:
     if_expression |
     identifier_expression |
     integer_expression |
-    defunc_expression;
+    defunc_expression |
+    fn_expression;
 
 defun_expression: OP 'defun' name=identifier_expression '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=expression CP;
+fn_expression: OP 'fn' '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=expression CP;
 if_expression: OP 'if' condition=expression ifTrue=expression ifFalse=expression CP;
 defunc_expression: OP 'defunc' name=identifier_expression '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=HEREDOC CP;
 call_expression: OP fn=expression (args+=expression)* CP;

@@ -11,10 +11,11 @@ interface TopLevelOnlyExpressions: Expression
 class CallExpression(val target: Expression, val args: List<Expression>) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val resultVarName = ctx.newVarName();
-        val (_, targetName) = target.generate(ctx);
+        val (targetBody, targetName) = target.generate(ctx);
         val generatedArgs = args.map { it.generate(ctx) }
         val argsString = (arrayOf("$targetName->value.callable.clojure") + generatedArgs.map { it.varName }).joinToString(", ")
         val body = """
+            $targetBody
             ${generatedArgs.map { it.body }.joinToString("")}
             assert($targetName->type == CALLABLE);
             assert($targetName->value.callable.n_args == ${args.size});
@@ -47,7 +48,7 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
         ctx.prototypes += prototype
 
         ctx.scope.pushScope()
-        arguments.forEach { ctx.scope[it.name] = Symbol(it.name, variableCName(it.name)) }
+        arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
         val (generatedBody, returnVarName) = body.generate(ctx)
         ctx.scope.popScope()
 
@@ -97,7 +98,53 @@ class DefunCExpression(val name: String, val arguments: List<IdentifierExpressio
 
         return GeneratedExpression("ERROR", "ERROR")
     }
+}
 
+class FnExpression(val arguments: List<IdentifierExpression>, val body: Expression) : Expression {
+    override fun generate(ctx: GeneratorContext): GeneratedExpression {
+        val cName = ctx.newVarName()
+        val clojureType = cNameClojureType(cName)
+        val bodyName = cNameBody(cName)
+        val startLabel = cNameStartLabel(cName)
+
+        val argumentString = (arrayOf("$clojureType *clj") + arguments.map { "$lispObjectType ${nameCName(it.name)}" }).joinToString(", ")
+        val symbolsToCapture = ctx.scope.allButTop(2)
+
+        val prototype = """
+            typedef struct {
+                ${symbolsToCapture.values.joinToString(""){"$lispObjectType ${it.cName};\n"}}
+            } $clojureType;            
+            $lispObjectType ${bodyName}($argumentString);
+        """.trimIndent()
+
+        ctx.prototypes += prototype
+
+        ctx.scope.pushScope()
+        arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
+        symbolsToCapture.values.forEach { ctx.scope[it.name] = Symbol(it.name, "clj->${it.cName}") }
+
+        val (generatedBody, returnVarName) = body.generate(ctx)
+        ctx.scope.popScope()
+
+
+        val funcionBody = """
+            $lispObjectType ${bodyName}($argumentString){
+                $startLabel:;
+                $generatedBody;
+                return $returnVarName;
+            }
+        """.trimIndent()
+        ctx.functionBodies += funcionBody;
+
+        val clojureVar = ctx.newVarName()
+        val body = """
+            $clojureType *$clojureVar = malloc(sizeof($clojureType));
+            ${symbolsToCapture.values.joinToString("") { "$clojureVar->${ctx.scope[it.name]!!.cName} = ${ctx.scope[it.name]!!.cName};\n" }}
+            $lispObjectType $cName = lisp__callable_constructor($bodyName, ${arguments.size}, $clojureVar);
+        """.trimIndent()
+
+        return GeneratedExpression(body, cName)
+    }
 }
 
 class IfExpression(val condition: Expression, val ifTrue: Expression, val ifFalse: Expression) : Expression {

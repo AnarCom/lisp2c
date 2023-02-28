@@ -9,6 +9,11 @@ C
         1
         (* n (factorial (- n 1))) ) )
 
+(defun subber [i]
+    (fn [j] (- j i)))
+
 
 (printint (factorial 5))
 (printint (factorial 6))
+(printint ((subber 1) 10))
+(printint ((subber 2) 10))

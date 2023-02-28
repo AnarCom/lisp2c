@@ -19,4 +19,10 @@ class MapStack<K, V> {
     operator fun set(key: K, value: V){
         maps.last()[key] = value
     }
+
+    fun allButTop(skip: Int): Map<K, V>{
+        val res = mutableMapOf<K, V>()
+        maps.drop(skip).forEach { it.forEach { (key, value) -> res[key] = value } }
+        return res
+    }
 }
