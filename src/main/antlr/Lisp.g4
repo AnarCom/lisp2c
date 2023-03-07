@@ -32,10 +32,10 @@ expression:
     recur_expression |
     do_expression;
 
-defun_expression: OP 'defun' name=identifier_expression '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=expression CP;
-fn_expression: OP 'fn' '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=expression CP;
+defun_expression: OP 'defun' name=identifier_expression '[' (args+=identifier_expression)* ']' body=expression CP;
+fn_expression: OP 'fn' '[' (args+=identifier_expression)* ']' body=expression CP;
 if_expression: OP 'if' condition=expression ifTrue=expression ifFalse=expression CP;
-defunc_expression: OP 'defunc' name=identifier_expression '[' (args+=identifier_expression (',' args+=identifier_expression)*)? ']' body=HEREDOC CP;
+defunc_expression: OP 'defunc' name=identifier_expression '[' (args+=identifier_expression)* ']' body=HEREDOC CP;
 recur_expression: OP 'recur' (args+=expression)* CP;
 do_expression: OP 'do' (args+=expression)* CP;
 call_expression: OP fn=expression (args+=expression)* CP;

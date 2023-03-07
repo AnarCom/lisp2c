@@ -26,7 +26,16 @@ val builtinSymbols = mapOf(
     "+" cname "lisp__add",
     "-" cname "lisp__sub",
     "/" cname "lisp__div",
-    "=" cname "lisp__eq"
+    "=" cname "lisp__eq",
+
+    "or" cname "lisp__or",
+    "and" cname "lisp__and",
+    "not" cname "lisp__not",
+
+    "head" cname "lisp__head",
+    "tail" cname "lisp__tail",
+    "append" cname "lisp__append",
+    "size" cname "lisp__size",
 
 )
 
