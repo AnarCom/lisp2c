@@ -1,6 +1,11 @@
 package ru.nsu.lisp2c
 
 data class GeneratedExpression(val body: String, val varName: String)
+sealed class SimplifiedExpression
+class SimplifiedStringExpression(val value: String): SimplifiedExpression()
+class SimplifiedListExpression(vararg values: SimplifiedExpression): SimplifiedExpression(){
+    val value = values.toList()
+}
 
 sealed interface Expression {
     fun generate(ctx: GeneratorContext): GeneratedExpression
@@ -26,6 +31,19 @@ class CallExpression(val target: Expression, val args: List<Expression>) : Expre
     }
 }
 
+private fun globalFunctionPrototype(bodyName: String, cName: String, arguments: String): String{
+    return """
+            $lispObjectType ${bodyName}($arguments);
+            $lispObjectType $cName = NULL;
+        """.trimIndent()
+}
+
+private fun globalFunctionMainInit(bodyName: String, cName: String, argCount: Int): String {
+    return """
+            $cName = lisp__callable_constructor($bodyName, $argCount, NULL);
+        """.trimIndent()
+}
+
 class DefunExpression(val name: String, val arguments: List<IdentifierExpression>, val body: Expression) : Expression,
     TopLevelOnlyExpressions {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
@@ -38,17 +56,8 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
         val argumentString =
             (arrayOf("void *clj") + arguments.map { "$lispObjectType ${nameCName(it.name)}" }).joinToString(", ")
 
-        val prototype = """
-            $lispObjectType ${bodyName}($argumentString);
-            $lispObjectType $cName = NULL;
-        """.trimIndent()
-
-        val mainInit = """
-            $cName = lisp__callable_constructor($bodyName, ${arguments.size}, NULL);
-        """.trimIndent()
-
-        ctx.mainLines += mainInit
-        ctx.prototypes += prototype
+        ctx.prototypes += globalFunctionPrototype(bodyName, cName, argumentString)
+        ctx.mainLines += globalFunctionMainInit(bodyName, cName, arguments.size)
 
         ctx.scope.pushScope()
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
@@ -58,7 +67,7 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
         ctx.scope.popScope()
 
 
-        val body = """
+        val functionBody = """
             $lispObjectType ${bodyName}($argumentString){
                 $startLabel:;
                 $generatedBody;
@@ -66,7 +75,7 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
             }
         """.trimIndent()
 
-        ctx.functionBodies += body
+        ctx.functionBodies += functionBody
 
         return GeneratedExpression("ERROR", "ERROR")
     }
@@ -83,17 +92,8 @@ class DefunCExpression(val name: String, val arguments: List<IdentifierExpressio
         val argumentString =
             (arrayOf("void *__clj__") + arguments.map { "$lispObjectType ${it.name}" }).joinToString(", ")
 
-        val prototype = """
-            $lispObjectType ${bodyName}($argumentString);
-            $lispObjectType $cName = NULL;
-        """.trimIndent()
-
-        val mainInit = """
-            $cName = lisp__callable_constructor($bodyName, ${arguments.size}, NULL);
-        """.trimIndent()
-
-        ctx.mainLines += mainInit
-        ctx.prototypes += prototype
+        ctx.prototypes += globalFunctionPrototype(bodyName, cName, argumentString)
+        ctx.mainLines += globalFunctionMainInit(bodyName, cName, arguments.size)
 
         val body = """
             $lispObjectType ${bodyName}($argumentString){
@@ -136,14 +136,14 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         ctx.popRecurContext()
 
 
-        val funcionBody = """
+        val functionBody = """
             $lispObjectType ${bodyName}($argumentString){
                 $startLabel:;
                 $generatedBody;
                 return $returnVarName;
             }
         """.trimIndent()
-        ctx.functionBodies += funcionBody
+        ctx.functionBodies += functionBody
 
         val clojureVar = ctx.newVarName()
         val body = """
