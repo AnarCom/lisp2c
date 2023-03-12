@@ -1,6 +1,11 @@
 package ru.nsu.lisp2c
 
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.Stack
+import kotlin.io.path.ExperimentalPathApi
+import kotlin.io.path.name
+import kotlin.io.path.walk
 
 data class RecurContext(val label: String, val cNames: List<String>)
 
@@ -18,6 +23,10 @@ data class GeneratorContext(
     fun popRecurContext() = recurContextStack.pop()
     val recurContext: RecurContext
         get() = recurContextStack.peek()
+
+    var lastUsableSnapshot: String = ""
+    var nextMacroExpansionId = 0;
+    val macroExpansionDir = Files.createDirectories(Paths.get("tmp_macro_expansion"))
 }
 
 
@@ -30,23 +39,44 @@ class Generator {
 
     }
 
+    @OptIn(ExperimentalPathApi::class)
+    // TODO: compile sequentially
     fun generate(prog: List<Expression>): String {
+        ctx.macroExpansionDir.walk().forEach {
+            println(it.name)
+        }
+
         val defuns = prog.filterIsInstance<TopLevelOnlyExpressions>()
         val mainExpressions = prog.filterNot { it is TopLevelOnlyExpressions }
-        defuns.forEach { it.generate(ctx) }
+        defuns.forEach {
+            ctx.lastUsableSnapshot = generateSnapshot()
+            it.generate(ctx)
+        }
+        ctx.lastUsableSnapshot = generateSnapshot()
+
+        val mainSideEffects =
+            mainExpressions.fold(mutableListOf<String>()) { acc, expr -> acc.apply { add(expr.generate(ctx).body) } }
+
+        return """
+            ${generateSnapshot()}
+            ${mainSideEffects.joinToString("\n")}
+            return 0;
+            }
+        """.trimIndent()
+    }
+
+    private fun generateSnapshot(): String {
 
         val functionTypedefs = (0..10).map { n ->
             val args = (arrayOf("void*") + (0 until n).map { lispObjectType }).joinToString(", ")
             "typedef $lispObjectType(*${functionType(n)})($args);"
         }
 
-        val mainSideEffects =
-            mainExpressions.fold(mutableListOf<String>()) { acc, expr -> acc.apply { add(expr.generate(ctx).body) } }
-
         return """
             #include "main.h"
             #include "assert.h"
             #include "runtime.h"
+            #include "macro.h"
             
             ${functionTypedefs.joinToString("\n")}
             ${ctx.prototypes.joinToString("\n")}
@@ -54,10 +84,8 @@ class Generator {
             int main(){
                 runtime__init();
                 ${ctx.mainLines.joinToString("\n")}
-                // non-defun expressions
-                ${mainSideEffects.joinToString("\n")}
-                return 0;
-            }
+                // PRELUDE END
+                
         """.trimIndent()
     }
 }

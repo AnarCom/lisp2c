@@ -10,6 +10,20 @@ C
 C
 )
 
+(defunc putchar [c] <<C
+    putchar(c->value.c);
+    return c;
+C
+)
+
+(defun ps [s] (if (= (size s) 0)
+    s
+    (do
+        (putchar (head s))
+        (recur (tail s))
+    )
+))
+
 (defunc list [] <<C
     return lisp__list_constructor();
 C
@@ -24,7 +38,7 @@ C
     (fn [j] (- j i)))
 
 
-(defun for_in_range [start stop acc, f]
+(defun for_in_range [start stop acc f]
     (if (= acc stop)
         1
         (do
@@ -56,4 +70,38 @@ C
 
 (map printint
     (map factorial (append (append (append (list) 3) 4) 5)
+    ))
+
+(defun doNothing [forms] forms)
+
+(doNothing ! printint ((fn [i] (+ i 1)) 2) )
+
+(defun macroIsList [form] (head form))
+(defun macroContents [form]  (head (tail (tail form))))
+(defun macroCreteListForm [forms] (append(append(append (list) true) false) forms))
+(defun macroCreateStringForm [s] (append (append (append (list) false) false) s))
+
+(defun rev [l]
+    (if (= (size l) 0)
+        (list)
+        (append (rev (tail l)) (head l))
+    )
+)
+
+(ps "MACRO DEMO\n")
+
+(defun listOf_ [oldForms]
+    (if (= (size oldForms) 0)
+        (macroCreteListForm (append (list) (macroCreateStringForm "list") ))
+        (macroCreteListForm (append (append (append (list) (macroCreateStringForm "append")) (listOf_ (tail oldForms)) ) (head oldForms)))
+    )
+)
+
+(defun listOf [forms] (
+    listOf_ (rev (macroContents forms))
+))
+
+
+(map printint
+    (map factorial (listOf ! 3 4 5)
     ))

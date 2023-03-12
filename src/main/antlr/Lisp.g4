@@ -25,13 +25,16 @@ expression:
     defun_expression |
     call_expression |
     if_expression |
+    boolean_expression |
     identifier_expression |
     integer_expression |
     defunc_expression |
     fn_expression |
     recur_expression |
     do_expression |
-    macro_expand_expression;
+    macro_expand_expression |
+
+    string_expression;
 
 defun_expression: OP 'defun' name=identifier_expression '[' (args+=identifier_expression)* ']' body=expression CP;
 fn_expression: OP 'fn' '[' (args+=identifier_expression)* ']' body=expression CP;
@@ -39,14 +42,21 @@ if_expression: OP 'if' condition=expression ifTrue=expression ifFalse=expression
 defunc_expression: OP 'defunc' name=identifier_expression '[' (args+=identifier_expression)* ']' body=HEREDOC CP;
 recur_expression: OP 'recur' (args+=expression)* CP;
 do_expression: OP 'do' (args+=expression)* CP;
-macro_expand_expression: OP name=identifier_expression '!' (args+=expression)* CP;
+macro_expand_expression: OP name=identifier_expression '!' (args+=simplified_expression)* CP;
 call_expression: OP fn=expression (args+=expression)* CP;
 
-identifier_expression: name=IDENTIFIER;
 string_expression: value=STRING;
 integer_expression: value=NUMBER;
 boolean_expression: value=(TRUE|FALSE);
+identifier_expression: name=IDENTIFIER;
 
+
+
+simplified_expression: simplified_square_expression | simplified_round_expression | simplified_expression_arg;
+simplified_square_expression: '[' (args+=simplified_expression)* ']';
+simplified_round_expression: '(' (args+=simplified_expression)* ')';
+
+simplified_expression_arg: IDENTIFIER | STRING | NUMBER | TRUE | FALSE | '!' | 'fn' | 'if' | 'recur' | 'do';
 //identifier: IDENTIFIER;
 //string: STRING;
 //integer: NUMBER;
@@ -55,6 +65,8 @@ boolean_expression: value=(TRUE|FALSE);
 /*------------------------------------------------------------------
  * LEXER RULES
  *------------------------------------------------------------------*/
+TRUE: 'true';
+FALSE: 'false';
 IDENTIFIER : ((LETTER (LETTER | DIGIT)*) | PLUS | MINUS | MULT | DIV | EQ) ;
 
 PLUS : '+';
@@ -64,8 +76,6 @@ DIV : '/';
 EQ : '=';
 OP : '(';
 CP : ')';
-TRUE: 'true';
-FALSE: 'false';
 
 STRING : '"'~["\\\n]*(('\\'.)~["\\\n]*)*'"' ;
 

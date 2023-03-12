@@ -47,16 +47,9 @@ fun main(args: Array<String>) {
     val prog = parser.program()
     val parsed = ProgramVisitor().visitProgram(prog)
     val generated = Generator().generate(parsed)
-    val process = ProcessBuilder("clang-format")
-        .redirectInput(ProcessBuilder.Redirect.PIPE)
-        .redirectOutput(ProcessBuilder.Redirect.PIPE)
-        .redirectError(ProcessBuilder.Redirect.INHERIT)
-        .start()
 
-    process.outputStream.write(generated.encodeToByteArray())
-    process.outputStream.close()
-    val formatted = process.inputStream.bufferedReader().readText()
-    println(formatted)
+    val formatted = reformatCode(generated)
+//    println(formatted)
     FileOutputStream("../c-lisp2c-runtime/main.c").bufferedWriter().apply {
         write(formatted)
         close()
