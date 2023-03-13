@@ -3,9 +3,7 @@ package ru.nsu.lisp2c
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.util.Stack
-import kotlin.io.path.ExperimentalPathApi
-import kotlin.io.path.name
-import kotlin.io.path.walk
+import kotlin.io.path.*
 
 data class RecurContext(val label: String, val cNames: List<String>)
 
@@ -43,7 +41,7 @@ class Generator {
     // TODO: compile sequentially
     fun generate(prog: List<Expression>): String {
         ctx.macroExpansionDir.walk().forEach {
-            println(it.name)
+            it.absolute().deleteExisting()
         }
 
         val defuns = prog.filterIsInstance<TopLevelOnlyExpressions>()

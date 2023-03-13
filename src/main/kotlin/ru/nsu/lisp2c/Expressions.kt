@@ -128,10 +128,11 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         val argumentString =
             (arrayOf("$clojureType *clj") + arguments.map { "$lispObjectType ${nameCName(it.name)}" }).joinToString(", ")
         val symbolsToCapture = ctx.scope.allButTop(2)
+        val newSymbolNames = symbolsToCapture.map { it.key to ctx.newVarName() }.toMap()
 
         val prototype = """
             typedef struct {
-                ${symbolsToCapture.values.joinToString("") { "$lispObjectType ${it.cName};\n" }}
+                ${symbolsToCapture.values.joinToString("") { "$lispObjectType ${newSymbolNames[it.name]!!};\n" }}
             } $clojureType;            
             $lispObjectType ${bodyName}($argumentString);
         """.trimIndent()
@@ -139,8 +140,8 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         ctx.prototypes += prototype
 
         ctx.scope.pushScope()
+        symbolsToCapture.values.forEach { ctx.scope[it.name] = Symbol(it.name, "clj->${newSymbolNames[it.name]!!}") }
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
-        symbolsToCapture.values.forEach { ctx.scope[it.name] = Symbol(it.name, "clj->${it.cName}") }
         ctx.pushRecurContext(RecurContext(startLabel, arguments.map { nameCName(it.name) }))
         val (generatedBody, returnVarName) = body.generate(ctx)
         ctx.scope.popScope()
@@ -159,7 +160,7 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         val clojureVar = ctx.newVarName()
         val body = """
             $clojureType *$clojureVar = malloc(sizeof($clojureType));
-            ${symbolsToCapture.values.joinToString("") { "$clojureVar->${ctx.scope[it.name]!!.cName} = ${ctx.scope[it.name]!!.cName};\n" }}
+            ${symbolsToCapture.values.joinToString("") { "$clojureVar->${newSymbolNames[it.name]!!} = ${ctx.scope[it.name]!!.cName};\n" }}
             $lispObjectType $cName = lisp__callable_constructor($bodyName, ${arguments.size}, $clojureVar);
         """.trimIndent()
 

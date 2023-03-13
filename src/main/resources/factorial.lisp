@@ -46,11 +46,15 @@ C
             (recur start stop (- acc 1) f)
         )))
 
+(ps "factorial demo\n")
 (printint (factorial 5))
 (printint (factorial 6))
+
+(ps "clojure demo (subber)\n")
 (printint ((subber 1) 10))
 (printint ((subber 2) 10))
 
+(ps "lambda demo\n")
 (for_in_range 11 5 11 (fn [i] (printints i (factorial i))))
 
 
@@ -67,18 +71,17 @@ C
         (concat (append (list) (f (head coll))) (map f (tail coll)))
     )
 )
-
+(ps "list demo\n")
 (map printint
     (map factorial (append (append (append (list) 3) 4) 5)
     ))
 
-(defun doNothing [forms] forms)
 
-(doNothing ! printint ((fn [i] (+ i 1)) 2) )
 
 (defun macroIsList [form] (head form))
 (defun macroContents [form]  (head (tail (tail form))))
 (defun macroCreteListForm [forms] (append(append(append (list) true) false) forms))
+(defun macroCreteArgsForm [forms] (append(append(append (list) true) true) forms))
 (defun macroCreateStringForm [s] (append (append (append (list) false) false) s))
 
 (defun rev [l]
@@ -105,3 +108,30 @@ C
 (map printint
     (map factorial (listOf ! 3 4 5)
     ))
+
+(ps "LET DEMO\n")
+
+(defun let_ [binds statement]
+    (if (= (size binds) 0)
+        statement
+        (macroCreteListForm (listOf !
+            (macroCreteListForm (listOf!
+                (macroCreateStringForm "fn")
+                (macroCreteArgsForm (listOf ! (head binds)))
+                (let_ (tail (tail binds)) statement)
+            ))
+            (head (tail binds))
+        ))
+    )
+)
+
+(defun let [forms]
+    (let_  (macroContents (head (macroContents forms)))  (head (tail (macroContents forms))) ))
+
+
+(let! [
+    a 1
+    b 2
+    c (+ a b)
+    c (factorial c)
+] (printint c))
