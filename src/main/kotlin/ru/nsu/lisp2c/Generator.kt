@@ -25,6 +25,8 @@ data class GeneratorContext(
     var lastUsableSnapshot: String = ""
     var nextMacroExpansionId = 0;
     val macroExpansionDir = Files.createDirectories(Paths.get("tmp_macro_expansion"))
+
+    val localVars = Stack<MutableList<String>>().apply { add(mutableListOf()) }
 }
 
 
@@ -58,7 +60,7 @@ class Generator {
         return """
             ${generateSnapshot()}
             ${mainSideEffects.joinToString("\n")}
-            return 0;
+            ${ctx.localVars.peek().joinToString("\n") { "gc__dec_ref_counter($it);" }}
             }
         """.trimIndent()
     }
@@ -75,6 +77,7 @@ class Generator {
             #include "assert.h"
             #include "runtime.h"
             #include "macro.h"
+            #include "GarbageCollector.h"
             
             ${functionTypedefs.joinToString("\n")}
             ${ctx.prototypes.joinToString("\n")}

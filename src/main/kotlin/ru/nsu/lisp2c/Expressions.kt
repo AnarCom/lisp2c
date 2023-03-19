@@ -22,6 +22,19 @@ sealed interface Expression {
     fun generate(ctx: GeneratorContext): GeneratedExpression
 }
 
+fun GeneratorContext.createVar(cName: String): String {
+    this.localVars.peek().add(cName)
+    return "$lispObjectType $cName = 0;"
+}
+fun GeneratorContext.passArgument(cName: String) = "gc__inc_ref_counter($cName)"
+fun GeneratorContext.returnVar(cName: String): String {
+    return """
+        gc__inc_ref_counter($cName);
+        ${localVars.peek().joinToString ("\n"){ "gc__dec_ref_counter($it);" }}
+        return $cName;
+    """.trimIndent()
+}
+
 interface TopLevelOnlyExpressions : Expression
 
 class CallExpression(val target: Expression, val args: List<Expression>) : Expression {
@@ -30,13 +43,14 @@ class CallExpression(val target: Expression, val args: List<Expression>) : Expre
         val (targetBody, targetName) = target.generate(ctx)
         val generatedArgs = args.map { it.generate(ctx) }
         val argsString =
-            (arrayOf("$targetName->value.callable.clojure") + generatedArgs.map { it.varName }).joinToString(", ")
+            (arrayOf("$targetName->value.callable.clojure") + generatedArgs.map { ctx.passArgument(it.varName) }).joinToString(", ")
         val body = """
             $targetBody
             ${generatedArgs.map { it.body }.joinToString("")}
             assert($targetName->type == CALLABLE);
             assert($targetName->value.callable.n_args == ${args.size});
-            $lispObjectType $resultVarName = ((${functionType(args.size)})$targetName->value.callable.f)($argsString);
+            ${ctx.createVar(resultVarName)}
+            $resultVarName = ((${functionType(args.size)})$targetName->value.callable.f)($argsString);
         """.trimIndent()
         return GeneratedExpression(body, resultVarName)
     }
@@ -73,6 +87,8 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
         ctx.scope.pushScope()
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
         ctx.pushRecurContext(RecurContext(startLabel, arguments.map { nameCName(it.name) }))
+        ctx.localVars.push(mutableListOf())
+        arguments.forEach { ctx.localVars.peek().add(nameCName(it.name)) }
         val (generatedBody, returnVarName) = body.generate(ctx)
         ctx.popRecurContext()
         ctx.scope.popScope()
@@ -82,10 +98,11 @@ class DefunExpression(val name: String, val arguments: List<IdentifierExpression
             $lispObjectType ${bodyName}($argumentString){
                 $startLabel:;
                 $generatedBody;
-                return $returnVarName;
+                ${ctx.returnVar(returnVarName)}
             }
         """.trimIndent()
 
+        ctx.localVars.pop()
         ctx.functionBodies += functionBody
 
         return GeneratedExpression("ERROR", "ERROR")
@@ -118,6 +135,7 @@ class DefunCExpression(val name: String, val arguments: List<IdentifierExpressio
     }
 }
 
+// TODO: gc
 class FnExpression(val arguments: List<IdentifierExpression>, val body: Expression) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val cName = ctx.newVarName()
@@ -132,8 +150,9 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
 
         val prototype = """
             typedef struct {
+                size_t sz;
                 ${symbolsToCapture.values.joinToString("") { "$lispObjectType ${newSymbolNames[it.name]!!};\n" }}
-            } $clojureType;            
+            } __attribute__((packed)) $clojureType;            
             $lispObjectType ${bodyName}($argumentString);
         """.trimIndent()
 
@@ -143,6 +162,8 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
         symbolsToCapture.values.forEach { ctx.scope[it.name] = Symbol(it.name, "clj->${newSymbolNames[it.name]!!}") }
         arguments.forEach { ctx.scope[it.name] = Symbol(it.name, nameCName(it.name)) }
         ctx.pushRecurContext(RecurContext(startLabel, arguments.map { nameCName(it.name) }))
+        ctx.localVars.push(mutableListOf())
+        arguments.forEach { ctx.localVars.peek().add(nameCName(it.name)) }
         val (generatedBody, returnVarName) = body.generate(ctx)
         ctx.scope.popScope()
         ctx.popRecurContext()
@@ -152,16 +173,19 @@ class FnExpression(val arguments: List<IdentifierExpression>, val body: Expressi
             $lispObjectType ${bodyName}($argumentString){
                 $startLabel:;
                 $generatedBody;
-                return $returnVarName;
+                ${ctx.returnVar(returnVarName)}
             }
         """.trimIndent()
+        ctx.localVars.pop()
         ctx.functionBodies += functionBody
 
         val clojureVar = ctx.newVarName()
         val body = """
             $clojureType *$clojureVar = malloc(sizeof($clojureType));
-            ${symbolsToCapture.values.joinToString("") { "$clojureVar->${newSymbolNames[it.name]!!} = ${ctx.scope[it.name]!!.cName};\n" }}
-            $lispObjectType $cName = lisp__callable_constructor($bodyName, ${arguments.size}, $clojureVar);
+            $clojureVar->sz = ${symbolsToCapture.size};
+            ${symbolsToCapture.values.joinToString("") { "$clojureVar->${newSymbolNames[it.name]!!} = gc__inc_ref_counter(${ctx.scope[it.name]!!.cName});\n" }}
+            ${ctx.createVar(cName)}
+            $cName = lisp__callable_constructor($bodyName, ${arguments.size}, $clojureVar);
         """.trimIndent()
 
         return GeneratedExpression(body, cName)
@@ -172,21 +196,34 @@ class IfExpression(val condition: Expression, val ifTrue: Expression, val ifFals
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val resultVarName = ctx.newVarName()
         val (conditionBody, conditionVar) = condition.generate(ctx)
+
+        val oldLocalVars = ctx.localVars.peek().toMutableList()
+
         val (trueBody, trueVar) = ifTrue.generate(ctx)
+        val trueLocalVars = (ctx.localVars.peek().toSet() - oldLocalVars.toSet()).toMutableList()
+        ctx.localVars.peek().removeAll(trueLocalVars)
+
+
         val (falseBody, falseVar) = ifFalse.generate(ctx)
+        val falseLocalVars = (ctx.localVars.peek().toSet() - oldLocalVars.toSet()).toMutableList()
+        ctx.localVars.peek().removeAll(falseLocalVars)
+
 
         val body = """
             $conditionBody
-            $lispObjectType $resultVarName;
+            ${ctx.createVar(resultVarName)}
             if(lisp__is_true($conditionVar)){
                 $trueBody
+                gc__inc_ref_counter($trueVar);
+                ${trueLocalVars.joinToString("\n"){ "gc__dec_ref_counter($it);" }}
                 $resultVarName = $trueVar;
             }else{
                 $falseBody
+                gc__inc_ref_counter($falseVar);
+                ${falseLocalVars.joinToString("\n") { "gc__dec_ref_counter($it);" }}
                 $resultVarName = $falseVar;
             }
         """.trimIndent()
-
         return GeneratedExpression(body, resultVarName)
     }
 }
@@ -194,7 +231,7 @@ class IfExpression(val condition: Expression, val ifTrue: Expression, val ifFals
 class IntExpression(val v: Int) : Expression {
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val varName = ctx.newVarName()
-        val body = "$lispObjectType $varName = lisp__int_constructor($v);\n"
+        val body = "${ctx.createVar(varName)}\n$varName = lisp__int_constructor($v);\n"
         return GeneratedExpression(body, varName)
     }
 }
@@ -217,7 +254,12 @@ class RecurExpression(val args: List<Expression>): Expression {
 
         val body = """
             $argCalculationBody
-            ${ctx.recurContext.cNames.mapIndexed{ i, cName -> "$cName = ${generatedArgs[i].varName};\n" }.joinToString("")}
+            ${ctx.recurContext.cNames.mapIndexed{ i, cName -> 
+                val dst = cName
+                val src = generatedArgs[i].varName
+                "if($dst != $src){gc__dec_ref_counter($dst);}$dst = $src;\n"
+            }.joinToString("")}
+            ${(ctx.localVars.peek().toSet() - ctx.recurContext.cNames.toSet() - generatedArgs.map { it.varName }.toSet()).joinToString("\n") { "gc__dec_ref_counter($it);" }}
             goto ${ctx.recurContext.label};
         """.trimIndent()
         return  GeneratedExpression(body, "NULL")
@@ -245,7 +287,8 @@ class StringExpression(val value: String): Expression{
     override fun generate(ctx: GeneratorContext): GeneratedExpression {
         val varName = ctx.newVarName()
         val body = """
-            $lispObjectType $varName = lisp__list_constructor();
+            ${ctx.createVar(varName)}
+            $varName = lisp__list_constructor();
             ${value.map { "$varName = lisp__list_append(0, $varName, lisp__char_constructor(${it.code}));" }.joinToString("\n")}
         """.trimIndent()
         return GeneratedExpression(body, varName)

@@ -6,6 +6,7 @@ C
 
 (defunc printints [i i2] <<C
     printf("%d %d\n", i->value.i, i2->value.i);
+    gc__dec_ref_counter(i2);
     return i;
 C
 )
@@ -135,3 +136,11 @@ C
     c (+ a b)
     c (factorial c)
 ] (printint c))
+
+
+(ps "gc invalid UAF\n")
+(defun addTwoNums [a b] (
+    let! [c (+ a b)] (fn [i] (+ c i))
+))
+
+(printint ((addTwoNums 100 20) 3))
