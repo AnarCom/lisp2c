@@ -164,3 +164,18 @@ C
 (map printint
     (filter (fn [c] (= c 0)) (listOf ! 2 3 0 3 3 0))
     )
+
+(ps "reduce test\n")
+
+(defun reducei [f coll v]
+    (if (= (size coll) 0)
+        v
+        (reducei f (tail coll) (f v (head coll)))
+    )
+   )
+
+(defun reduce [f coll]
+    (reducei f (tail coll) (head coll))
+    )
+
+(printint (reduce (fn [a b] (+ a b)) (listOf ! 1 2 3)))
