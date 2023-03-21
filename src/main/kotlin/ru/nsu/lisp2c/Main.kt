@@ -37,6 +37,8 @@ val builtinSymbols = mapOf(
     "append" cname "lisp__append",
     "size" cname "lisp__size",
 
+    "print" cname "lisp__print",
+
 )
 
 

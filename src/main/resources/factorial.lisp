@@ -179,3 +179,58 @@ C
     )
 
 (printint (reduce (fn [a b] (+ a b)) (listOf ! 1 2 3)))
+
+(defun delist [arrs]
+    (reducei
+        concat
+        (tail arrs)
+        (head arrs)
+        )
+)
+
+
+(defun range [from to]
+    (if (= from to)
+        (list)
+        (concat (append (list) from) (range (+ from 1) to))
+    )
+)
+
+(defun ends_with [col elem]
+    (= (head (rev col)) elem)
+)
+
+(defun step [alphabet words]
+    (delist
+        (map
+            (fn [word]
+                (map
+                    (fn [letter]
+                        (concat word letter)
+                    )
+                    (filter
+                        (fn [a]
+                           (not (ends_with word (head a)))
+                        )
+                        alphabet
+                    )
+                )
+            )
+            words
+        )
+    )
+)
+
+
+(defun task [alphabet size]
+    (reducei
+        (fn [acc x] (step alphabet acc))
+        (range 0 (- size 1))
+        alphabet
+    )
+)
+
+(ps "t\n")
+
+(print(task (listOf ! "a" "b" "c") 3))
+
