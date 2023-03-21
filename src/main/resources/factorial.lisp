@@ -6,9 +6,24 @@ C
 
 (defunc printints [i i2] <<C
     printf("%d %d\n", i->value.i, i2->value.i);
+    gc__dec_ref_counter(i2);
     return i;
 C
 )
+
+(defunc putchar [c] <<C
+    putchar(c->value.c);
+    return c;
+C
+)
+
+(defun ps [s] (if (= (size s) 0)
+    s
+    (do
+        (putchar (head s))
+        (recur (tail s))
+    )
+))
 
 (defunc list [] <<C
     return lisp__list_constructor();
@@ -24,7 +39,7 @@ C
     (fn [j] (- j i)))
 
 
-(defun for_in_range [start stop acc, f]
+(defun for_in_range [start stop acc f]
     (if (= acc stop)
         1
         (do
@@ -32,11 +47,15 @@ C
             (recur start stop (- acc 1) f)
         )))
 
+(ps "factorial demo\n")
 (printint (factorial 5))
 (printint (factorial 6))
+
+(ps "clojure demo (subber)\n")
 (printint ((subber 1) 10))
 (printint ((subber 2) 10))
 
+(ps "lambda demo\n")
 (for_in_range 11 5 11 (fn [i] (printints i (factorial i))))
 
 
@@ -53,7 +72,75 @@ C
         (concat (append (list) (f (head coll))) (map f (tail coll)))
     )
 )
-
+(ps "list demo\n")
 (map printint
     (map factorial (append (append (append (list) 3) 4) 5)
     ))
+
+
+
+(defun macroIsList [form] (head form))
+(defun macroContents [form]  (head (tail (tail form))))
+(defun macroCreteListForm [forms] (append(append(append (list) true) false) forms))
+(defun macroCreteArgsForm [forms] (append(append(append (list) true) true) forms))
+(defun macroCreateStringForm [s] (append (append (append (list) false) false) s))
+
+(defun rev [l]
+    (if (= (size l) 0)
+        (list)
+        (append (rev (tail l)) (head l))
+    )
+)
+
+(ps "MACRO DEMO\n")
+
+(defun listOf_ [oldForms]
+    (if (= (size oldForms) 0)
+        (macroCreteListForm (append (list) (macroCreateStringForm "list") ))
+        (macroCreteListForm (append (append (append (list) (macroCreateStringForm "append")) (listOf_ (tail oldForms)) ) (head oldForms)))
+    )
+)
+
+(defun listOf [forms] (
+    listOf_ (rev (macroContents forms))
+))
+
+
+(map printint
+    (map factorial (listOf ! 3 4 5)
+    ))
+
+(ps "LET DEMO\n")
+
+(defun let_ [binds statement]
+    (if (= (size binds) 0)
+        statement
+        (macroCreteListForm (listOf !
+            (macroCreteListForm (listOf!
+                (macroCreateStringForm "fn")
+                (macroCreteArgsForm (listOf ! (head binds)))
+                (let_ (tail (tail binds)) statement)
+            ))
+            (head (tail binds))
+        ))
+    )
+)
+
+(defun let [forms]
+    (let_  (macroContents (head (macroContents forms)))  (head (tail (macroContents forms))) ))
+
+
+(let! [
+    a 1
+    b 2
+    c (+ a b)
+    c (factorial c)
+] (printint c))
+
+
+(ps "gc invalid UAF\n")
+(defun addTwoNums [a b] (
+    let! [c (+ a b)] (fn [i] (+ c i))
+))
+
+(printint ((addTwoNums 100 20) 3))

@@ -73,4 +73,39 @@ class ExpressionVisitor : LispBaseVisitor<Expression>() {
             args = ctx.args.map { visitExpression(it) },
         )
     }
+
+    override fun visitMacro_expand_expression(ctx: LispParser.Macro_expand_expressionContext): Expression {
+        return MacroExpandExpression(
+            ctx.name.text,
+            SimplifiedListExpression(ctx.args.map { SimplifiedExpressionVisitor().visit(it) }, 0)
+        )
+    }
+
+    override fun visitBoolean_expression(ctx: LispParser.Boolean_expressionContext): Expression {
+        return BooleanExpression(
+            when(ctx.text){
+                "true" -> true
+                "false" -> false
+                else -> throw Exception("Invalid boolean expression")
+            }
+        )
+    }
+
+    override fun visitString_expression(ctx: LispParser.String_expressionContext): Expression {
+        return StringExpression(ctx.text.trim('"').replace("\\n", "\n"))
+    }
+}
+
+class SimplifiedExpressionVisitor: LispBaseVisitor<SimplifiedExpression>(){
+    override fun visitSimplified_round_expression(ctx: LispParser.Simplified_round_expressionContext): SimplifiedExpression {
+        return SimplifiedListExpression(ctx.args.map { visit(it) }, 0)
+    }
+
+    override fun visitSimplified_square_expression(ctx: LispParser.Simplified_square_expressionContext): SimplifiedExpression {
+        return SimplifiedListExpression(ctx.args.map { visit(it) }, 1)
+    }
+
+    override fun visitSimplified_expression_arg(ctx: LispParser.Simplified_expression_argContext): SimplifiedExpression {
+        return SimplifiedStringExpression(ctx.text)
+    }
 }
