@@ -144,3 +144,23 @@ C
 ))
 
 (printint ((addTwoNums 100 20) 3))
+
+
+(ps "filter example\n")
+
+(defun pred [a]
+    (= a 0))
+
+(defun filter [f coll]
+    (if (= (size coll) 0)
+            (list)
+            (if (f (head coll))
+                (concat (append (list) (head coll)) (filter f (tail coll)))
+                (concat (list) (filter f (tail coll)))
+                )
+        )
+)
+
+(map printint
+    (filter (fn [c] (= c 0)) (listOf ! 2 3 0 3 3 0))
+    )
