@@ -234,3 +234,31 @@ C
 
 (print(task (listOf ! "a" "b" "c") 3))
 
+(defunc scanf_int[] <<C
+    int t;
+    scanf(" %d", &t);
+    return lisp__int_constructor(t);
+C
+)
+(defunc scanf_char [] <<C
+    char t;
+    scanf(" %c", &t);
+    return lisp__char_constructor(t);
+C
+)
+(defun read_strs [t]
+     (if (= t 0)
+          (list)
+          (concat (listOf !(listOf ! (scanf_char))) (read_strs (- t 1)))
+     )
+)
+(defun stdin[]
+    (let ! [
+        len (scanf_int)
+        alp_len (scanf_int)
+        alphabet (read_strs alp_len)
+    ]
+        (task alphabet len)
+    )
+)
+(print (stdin))
