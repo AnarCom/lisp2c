@@ -370,7 +370,7 @@ class MacroExpandExpression(val macroName: String, val forms: SimplifiedExpressi
         val resultList = generateForm(ctx, false, 0, tempName);
         val body = """
             $lispObjectType $tempName = lisp__list_constructor();
-            ${expression.value.map { "$tempName = lisp__list_append(0, $tempName, lisp__char_constructor('$it'));" }.joinToString("\n")}
+            ${expression.value.map { "$tempName = lisp__list_append(0, $tempName, lisp__char_constructor(${it.toInt()}));" }.joinToString("\n")}
             ${resultList.body}
         """.trimIndent()
         return GeneratedExpression(body, resultList.varName)

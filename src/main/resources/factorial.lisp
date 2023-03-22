@@ -254,8 +254,11 @@ C
 )
 (defun stdin[]
     (let ! [
+        t (ps "First clojure task demo\nSequence len: ")
         len (scanf_int)
+        t (ps "Alphabet len: ")
         alp_len (scanf_int)
+        t (ps "Enter alphabet, one letter per line\n")
         alphabet (read_strs alp_len)
     ]
         (task alphabet len)
